@@ -26,9 +26,18 @@ class Settings(BaseSettings):
     judge_provider: ProviderName | None = None
     judge_model: str | None = None
 
+    # Exposes the offline, clearly labeled "sample" provider and judge.
+    sample_mode: bool = False
+
     database_url: str = "sqlite:///./data/evalforge.db"
     cors_origins: CommaList = Field(default_factory=lambda: ["http://localhost:3000"])
     max_concurrency: int = Field(default=4, ge=1, le=32)
+    max_attempts: int = Field(default=3, ge=1, le=6, description="Per call, including the first try")
+    request_timeout_s: float = Field(default=120.0, gt=0)
+    candidate_max_output_tokens: int = Field(default=8192, ge=1)
+    judge_max_output_tokens: int = Field(default=8192, ge=1)
+    # Blank = provider default. Some models reject an explicit temperature.
+    temperature: float | None = Field(default=None, ge=0, le=2)
 
     @field_validator("openai_models", "anthropic_models", "gemini_models", "cors_origins", mode="before")
     @classmethod
@@ -44,7 +53,7 @@ class Settings(BaseSettings):
             return None
         return value
 
-    @field_validator("judge_provider", "judge_model", mode="before")
+    @field_validator("judge_provider", "judge_model", "temperature", mode="before")
     @classmethod
     def _blank_is_none(cls, value: object) -> object:
         if isinstance(value, str) and not value.strip():
@@ -52,18 +61,19 @@ class Settings(BaseSettings):
         return value
 
     def api_key(self, provider: ProviderName) -> SecretStr | None:
+        """None for providers without a key, including the keyless "sample" provider."""
         return {
             "openai": self.openai_api_key,
             "anthropic": self.anthropic_api_key,
             "gemini": self.gemini_api_key,
-        }[provider]
+        }.get(provider)
 
     def configured_models(self, provider: ProviderName) -> list[str]:
         return {
             "openai": self.openai_models,
             "anthropic": self.anthropic_models,
             "gemini": self.gemini_models,
-        }[provider]
+        }.get(provider, [])
 
 
 @lru_cache
