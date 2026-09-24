@@ -2,7 +2,7 @@
 
 Run the same evaluation dataset against multiple LLMs (OpenAI, Anthropic, Gemini). Compare quality, latency, token usage and estimated cost, then detect regressions between experiments.
 
-> **Status: Milestone 2 of 5 (live-run pipeline and scoring).** The backend runs experiments end to end. So far that has only been verified with **fake providers in tests** and the **offline sample mode**. **No live provider call has been made yet**, so this README contains no real model results. Comparison endpoints and the UI come next. See [`docs/PLAN.md`](docs/PLAN.md).
+> **Status: Milestone 3 of 5 (backend complete: runs, persistence, baseline comparison).** So far everything has been verified only with **fake providers in tests** and the **offline sample mode**. **No live provider call has been made yet**, so this README contains no real model results. The UI comes next. See [`docs/PLAN.md`](docs/PLAN.md).
 
 ## Quick start (backend, no keys needed)
 
@@ -12,6 +12,7 @@ pip install -r backend/requirements-dev.txt
 cp .env.example .env           # sample mode is on by default in the example
 cd backend
 python -m app.demo             # SAMPLE setup run: 12 cases × 3 offline sample models
+python -m app.demo --compare   # SAMPLE prompt v1 vs v2 comparison against a baseline
 uvicorn app.main:app --reload  # API at http://localhost:8000, interactive docs at /docs
 pytest                         # temporary databases, fake providers, no API keys
 ```
@@ -38,15 +39,31 @@ Alternatively, export the same variables in your shell or container environment.
 
 **Costs:** every live run makes one candidate call plus one judge call per case per model, so 12 cases × 3 models is 72 paid requests. Retries (up to `MAX_ATTEMPTS`, for rate limits, timeouts and 5xx errors only) can add more.
 
-## API (so far)
+## API
 
 | Endpoint | Purpose |
 | --- | --- |
 | `GET /health` | App and database status |
 | `GET /models` | Configured models, availability and reason, sample flag, judge status |
 | `POST /experiments` | Create an experiment from `{name, system_prompt, cases[], baseline_experiment_id?, regression_threshold?}` |
+| `GET /experiments` | Newest first: status, case/run counts, models, sample flag, regression indicator (`regression` / `ok` / `no_verdict`, or `null` without a baseline) |
 | `GET /experiments/{id}` | Status, model runs, per-run aggregates with denominators |
 | `POST /experiments/{id}/run` | `{models: [{provider, model_id}]}`. Validates, returns 202, and runs in the background |
+| `GET /experiments/{id}/results` | Per-case results for every run: response, scores, missing facts, judge reason, latency, tokens, costs, errors, flags. Filters: `?case_id=`, `?failures_only=true` |
+| `GET /experiments/{id}/compare` | Paired comparison with the baseline, one model at a time (`?provider=`, `?model_id=` optional) |
+
+## Baseline comparison and regressions
+
+Create the candidate experiment with `baseline_experiment_id` set to an earlier experiment and, optionally, a `regression_threshold` (default **3 percentage points**). A typical prompt-regression check runs the same dataset and models with two prompt versions. `GET /experiments/{id}/compare` then returns a verdict for each model, but only when the comparison is like-for-like:
+
+- **Same test cases.** Compared by content hash, so order doesn't matter. If the cases differ, the response lists the IDs that were added, removed or changed, and gives no verdict.
+- **Same model.** The candidate's latest finished run of a model is paired with the baseline's latest finished run of that exact provider/model.
+- **Same evaluation settings.** Judge, prompt-template versions, token limits and temperature must match. If they don't, the response names the settings that differ.
+- **Complete pairs.** If any case that should be scored lacks a score on either side (a request or judge error), that metric returns `insufficient_data` instead of a verdict.
+
+For each metric the response reports the baseline mean, candidate mean, change in percentage points, and paired/applicable case counts. Groundedness only counts cases that have context. **Correctness and groundedness** are flagged as `regression` when the candidate is lower by *more than* the threshold, so a drop of exactly 3.0 points is not flagged. Required-fact coverage, median latency and candidate cost are shown alongside as information but never set the verdict. The endpoint also reports whether the prompt changed and lists the largest per-case drops. Small samples plus non-deterministic models and judges make these differences indicative, not statistically significant, and the response says so.
+
+In sample mode, `python -m app.demo --compare` runs this end to end. The sample output is `OK`: the one-sentence prompt lowers `sample-extractive`'s fact coverage from 100 to about 67, but the heuristic sample judge hardly changes its correctness score. A regression that actually trips the threshold is covered by tests with a controlled fake judge (`backend/tests/test_compare.py`), not by invented data.
 
 ## How a run is scored
 

@@ -1,7 +1,8 @@
 """SAMPLE MODE: a deterministic offline provider and judge for trying the app without API keys.
 
 Everything produced here is labeled with provider "sample". Outputs are simple text
-heuristics over the supplied context, latency is simulated, and token counts are word
+heuristics over the supplied context (sample-extractive answers in a single sentence when
+the system prompt asks for "one sentence"), latency is simulated, and token counts are word
 counts. None of it says anything about how a real model would perform.
 """
 
@@ -70,7 +71,9 @@ class SampleProvider:
         elif model_id == "sample-terse":
             text = _SENTENCE.split(context)[0]
         else:
-            text = self._extract(context, question)
+            # Prompt-sensitive on purpose, so offline prompt-regression demos have something to detect.
+            limit = 1 if "one sentence" in request.system_prompt.casefold() else 2
+            text = self._extract(context, question, limit)
         return ProviderResponse(
             provider=self.name,
             model_id=model_id,
@@ -81,12 +84,12 @@ class SampleProvider:
         )
 
     @staticmethod
-    def _extract(context: str, question: str) -> str:
-        """Return the (up to two) context sentences sharing the most words with the question."""
+    def _extract(context: str, question: str, limit: int) -> str:
+        """Return the (up to `limit`) context sentences sharing the most words with the question."""
         question_words = _content_words(question)
         sentences = [s for s in _SENTENCE.split(context) if s.strip()]
         ranked = sorted(sentences, key=lambda s: -len(question_words & _content_words(s)))
-        chosen = [s for s in sentences if s in ranked[:2]]
+        chosen = [s for s in sentences if s in ranked[:limit]]
         return " ".join(chosen)
 
 
