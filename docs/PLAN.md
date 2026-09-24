@@ -76,3 +76,7 @@ model run `pending → running → completed | partial | failed`.
 | Pricing | `backend/pricing/<as_of>.json`, USD per 1M tokens | Versioned with an as-of date; missing entry → cost "unavailable". |
 | Dataset format | JSON object `{name?, description?, cases: [...]}` or a bare array of cases | Matches the guide's sample case. |
 | Limits | 1–200 cases, prompt ≤ 8,000 chars, case fields ≤ 20,000 chars | "Sensible" bounds for a small eval set; configurable later. |
+| Sample mode (M2) | `SAMPLE_MODE=true` adds `sample/*` models + a heuristic judge, flagged `sample: true` | Lets the pipeline be demoed without keys while never passing mock output off as a live run. |
+| Judge output (M2) | Provider-agnostic "JSON only" prompt + Pydantic validation, no native structured-output APIs | One code path for all three providers; malformed output becomes a visible judge error. |
+| OpenAI API (M2) | Responses API (`responses.create`) | OpenAI's current primary text API. |
+| Initial model IDs (M2) | OpenAI `gpt-6-luna`, `gpt-6-sol` (user-specified); Anthropic `claude-haiku-4-5`, `claude-sonnet-5`; judge `claude-sonnet-5` | OpenAI prices not yet verified → cost shows "unavailable" until added to the pricing file. |

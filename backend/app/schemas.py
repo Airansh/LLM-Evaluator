@@ -1,9 +1,11 @@
 """API contracts and dataset validation."""
 
+from datetime import datetime
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from app.evaluation.aggregate import RunAggregate
 from app.evaluation.text import normalize_text
 from app.providers.base import ProviderName
 
@@ -106,6 +108,7 @@ class ModelInfo(BaseModel):
     model_id: str
     available: bool
     reason: str | None = Field(default=None, description="Why the model cannot be run, if unavailable")
+    sample: bool = Field(default=False, description="Offline sample model; output is not from a real LLM")
 
 
 class JudgeInfo(BaseModel):
@@ -118,3 +121,59 @@ class JudgeInfo(BaseModel):
 class ModelsOut(BaseModel):
     models: list[ModelInfo]
     judge: JudgeInfo
+
+
+class ModelRef(_Strict):
+    provider: ProviderName
+    model_id: str = Field(min_length=1, max_length=200)
+
+
+class RunRequest(_Strict):
+    models: list[ModelRef] = Field(min_length=1, max_length=10)
+
+    @field_validator("models")
+    @classmethod
+    def _unique_models(cls, models: list[ModelRef]) -> list[ModelRef]:
+        keys = [(m.provider, m.model_id) for m in models]
+        if len(set(keys)) != len(keys):
+            raise ValueError("each model may be selected only once per run")
+        return models
+
+
+class RunOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    provider: ProviderName
+    model_id: str
+    status: str
+    started_at: datetime | None
+    completed_at: datetime | None
+    error: str | None
+    judge_provider: str | None
+    judge_model_id: str | None
+    eval_config: dict[str, Any]
+    eval_config_hash: str
+    pricing_version: str | None
+    sample: bool = False
+    aggregate: RunAggregate | None = None
+
+
+class ExperimentOut(BaseModel):
+    id: str
+    name: str
+    system_prompt: str
+    created_at: datetime
+    baseline_experiment_id: str | None
+    regression_threshold: float
+    status: str
+    dataset_hash: str
+    prompt_hash: str
+    case_count: int
+    runs: list[RunOut]
+
+
+class RunStartedOut(BaseModel):
+    experiment_id: str
+    status: str
+    runs: list[RunOut]

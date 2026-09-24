@@ -34,7 +34,8 @@ def test_models_without_keys_are_unavailable(make_settings: Callable[..., Settin
     with TestClient(create_app(settings)) as client:
         body = client.get("/models").json()
     assert body["models"] == [
-        {"provider": "anthropic", "model_id": "claude-a", "available": False, "reason": "ANTHROPIC_API_KEY is not set"}
+        {"provider": "anthropic", "model_id": "claude-a", "available": False, "reason": "ANTHROPIC_API_KEY is not set",
+         "sample": False}
     ]
     assert body["judge"]["available"] is False
     assert body["judge"]["reason"] == "ANTHROPIC_API_KEY is not set"
