@@ -1,0 +1,90 @@
+@import "tailwindcss";
+
+/* Design tokens. Chart colors follow the dataviz reference palette (validated for light and
+   dark surfaces); status colors are reserved for state and always ship with an icon + label. */
+:root {
+  color-scheme: light;
+  --surface: #fcfcfb;
+  --surface-raised: #ffffff;
+  --surface-sunken: #f3f2ef;
+  --border: #e2e1dc;
+  --text-primary: #0b0b0b;
+  --text-secondary: #52514e;
+  --text-muted: #6e6d68;
+  --accent: #2a78d6;
+  --accent-ink: #1c5cab;
+  --accent-contrast: #ffffff;
+  --series-1: #2a78d6;
+  --grid: #e8e7e3;
+  --status-good: #0b7f0b;
+  --status-warning: #9a6700;
+  --status-serious: #b8501f;
+  --status-critical: #c02e2e;
+  --status-good-bg: #e7f5e7;
+  --status-warning-bg: #fdf3dc;
+  --status-serious-bg: #fbeae2;
+  --status-critical-bg: #fbe6e6;
+  --status-neutral-bg: #efeeea;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --surface: #1a1a19;
+    --surface-raised: #222220;
+    --surface-sunken: #141413;
+    --border: #383835;
+    --text-primary: #ffffff;
+    --text-secondary: #c3c2b7;
+    --text-muted: #9c9b92;
+    --accent: #3987e5;
+    --accent-ink: #86b6ef;
+    --accent-contrast: #0b0b0b;
+    --series-1: #3987e5;
+    --grid: #2c2c2a;
+    --status-good: #4cc24c;
+    --status-warning: #fab219;
+    --status-serious: #ec835a;
+    --status-critical: #ef6f6f;
+    --status-good-bg: #173017;
+    --status-warning-bg: #3a2e0f;
+    --status-serious-bg: #3b2418;
+    --status-critical-bg: #3d1c1c;
+    --status-neutral-bg: #2c2c2a;
+  }
+}
+
+@theme inline {
+  --color-surface: var(--surface);
+  --color-raised: var(--surface-raised);
+  --color-sunken: var(--surface-sunken);
+  --color-line: var(--border);
+  --color-ink: var(--text-primary);
+  --color-ink-2: var(--text-secondary);
+  --color-ink-3: var(--text-muted);
+  --color-accent: var(--accent);
+  --color-accent-ink: var(--accent-ink);
+  --color-accent-contrast: var(--accent-contrast);
+  --color-good: var(--status-good);
+  --color-warning: var(--status-warning);
+  --color-serious: var(--status-serious);
+  --color-critical: var(--status-critical);
+  --color-good-bg: var(--status-good-bg);
+  --color-warning-bg: var(--status-warning-bg);
+  --color-serious-bg: var(--status-serious-bg);
+  --color-critical-bg: var(--status-critical-bg);
+  --color-neutral-bg: var(--status-neutral-bg);
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+}
+
+body {
+  background: var(--surface);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}

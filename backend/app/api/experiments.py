@@ -109,6 +109,8 @@ def list_experiments(session: Session = Depends(get_session)) -> list[Experiment
                 run_count=len(experiment.model_runs),
                 models=sorted({f"{run.provider}/{run.model_id}" for run in experiment.model_runs}),
                 baseline_experiment_id=experiment.baseline_experiment_id,
+                dataset_hash=experiment.dataset_hash,
+                regression_threshold=experiment.regression_threshold,
                 sample=any(run.provider == SAMPLE_PROVIDER for run in experiment.model_runs),
                 regression=regression,
             )
