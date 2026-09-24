@@ -188,6 +188,8 @@ class ExperimentSummary(BaseModel):
     run_count: int
     models: list[str]
     baseline_experiment_id: str | None
+    dataset_hash: str
+    regression_threshold: float
     sample: bool = Field(description="True when any run used the offline sample provider")
     # "regression" | "ok" | "no_verdict", or None when there is no baseline.
     regression: Literal["regression", "ok", "no_verdict"] | None
@@ -234,3 +236,10 @@ class ResultsOut(BaseModel):
     total_cases: int
     low_score_threshold: float
     cases: list[CaseOut]
+
+
+class DatasetValidationOut(BaseModel):
+    valid: bool
+    errors: list[str]
+    case_count: int | None = None
+    dataset_hash: str | None = None

@@ -66,3 +66,19 @@ def test_settings_parse_comma_separated_env(monkeypatch) -> None:  # noqa: ANN00
     assert settings.anthropic_models == ["model-a", "model-b"]
     assert settings.anthropic_api_key is None
     assert settings.cors_origins == ["http://a.test", "http://b.test"]
+
+
+def test_sample_dataset_endpoint_and_validation(client: TestClient) -> None:
+    sample = client.get("/datasets/sample").json()
+    assert sample["cases"][0]["id"] == "returns_001"
+
+    ok = client.post("/datasets/validate", json=sample).json()
+    assert ok["valid"] is True and ok["case_count"] == len(sample["cases"]) and len(ok["dataset_hash"]) == 64
+
+    created = client.post("/experiments", json={"name": "x", "system_prompt": "p", "cases": sample["cases"]}).json()
+    assert created["dataset_hash"] == ok["dataset_hash"]  # the UI matches baselines by this hash
+
+    bad = client.post("/datasets/validate", json={"cases": [{"id": "a", "input": "q"}, {"id": "a", "input": "q"}]}).json()
+    assert bad["valid"] is False
+    assert any("expected_answer" in e for e in bad["errors"])
+    assert client.post("/datasets/validate", json="not a dataset").json()["valid"] is False

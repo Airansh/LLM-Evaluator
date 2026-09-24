@@ -6,7 +6,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app import __version__
-from app.api import experiments, health, models
+from app.api import datasets, experiments, health, models
 from app.config import Settings, get_settings
 from app.db.session import configure_engine, init_db, session_factory
 from app.evaluation.pricing import PricingTable, latest_pricing
@@ -45,6 +45,7 @@ def create_app(
     app.include_router(health.router)
     app.include_router(models.router)
     app.include_router(experiments.router)
+    app.include_router(datasets.router)
     return app
 
 

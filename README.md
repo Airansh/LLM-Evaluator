@@ -2,7 +2,9 @@
 
 Run the same evaluation dataset against multiple LLMs (OpenAI, Anthropic, Gemini). Compare quality, latency, token usage and estimated cost, then detect regressions between experiments.
 
-> **Status: Milestone 3 of 5 (backend complete: runs, persistence, baseline comparison).** So far everything has been verified only with **fake providers in tests** and the **offline sample mode**. **No live provider call has been made yet**, so this README contains no real model results. The UI comes next. See [`docs/PLAN.md`](docs/PLAN.md).
+> **Status: Milestone 4 of 5 (backend + web UI).** So far everything has been verified only with **fake providers in tests** and the **offline sample mode**. **No live provider call has been made yet**, so this README and its screenshots contain no real model results. Docker packaging comes next. See [`docs/PLAN.md`](docs/PLAN.md).
+
+![Results page (sample mode)](docs/screenshots/3-results.png)
 
 ## Quick start (backend, no keys needed)
 
@@ -18,6 +20,30 @@ pytest                         # temporary databases, fake providers, no API key
 ```
 
 `python -m app.demo` runs the real runner, scoring and SQLite persistence against the offline **sample** models, then prints per-model aggregates with denominators. Sample output is text heuristics, simulated latency and fictional prices, and it is labeled `SAMPLE` everywhere. It shows the pipeline works; it tells you nothing about any real model.
+
+## Web UI
+
+With the backend running on port 8000:
+
+```bash
+cd frontend
+npm install
+npm run dev        # http://localhost:3000
+```
+
+| Screen | What it shows |
+| --- | --- |
+| Dashboard (`/`) | Recent experiments, run status, total case evaluations, regression indicators, **New evaluation** |
+| Create (`/experiments/new`) | Name, prompt, sample dataset or JSON upload (validated with errors listed), models with key availability, compatible baselines only, threshold. **New candidate from this** on a results page pre-fills the same cases, models and prompt so you can edit the prompt |
+| Results (`/experiments/[id]`) | Model table with score denominators and error counts, regression panel, quality-vs-cost chart, per-case grid with flags; updates live while running |
+| Failure inspector (`/experiments/[id]/test/[testId]`) | Question, context, expected answer, each model's response, fact matches, metrics, judge rationale, latency, costs and errors |
+
+Screenshots in [`docs/screenshots/`](docs/screenshots/) come from a real session against the backend in **sample mode**: create → run → results → failed case → baseline comparison, plus dark mode and a 390px mobile view. The sample runs are labeled `SAMPLE` on every screen.
+
+| | |
+| --- | --- |
+| ![Dashboard](docs/screenshots/1-dashboard.png) | ![Create](docs/screenshots/2-create.png) |
+| ![Failure inspector](docs/screenshots/4-inspector-failed-case.png) | ![Comparison](docs/screenshots/5-comparison.png) |
 
 ## Adding your API keys
 
@@ -51,6 +77,8 @@ Alternatively, export the same variables in your shell or container environment.
 | `POST /experiments/{id}/run` | `{models: [{provider, model_id}]}`. Validates, returns 202, and runs in the background |
 | `GET /experiments/{id}/results` | Per-case results for every run: response, scores, missing facts, judge reason, latency, tokens, costs, errors, flags. Filters: `?case_id=`, `?failures_only=true` |
 | `GET /experiments/{id}/compare` | Paired comparison with the baseline, one model at a time (`?provider=`, `?model_id=` optional) |
+| `GET /datasets/sample` | The bundled synthetic dataset |
+| `POST /datasets/validate` | Validate a dataset without storing it; returns errors, or the case count and content hash (used to offer only compatible baselines) |
 
 ## Baseline comparison and regressions
 
