@@ -177,3 +177,60 @@ class RunStartedOut(BaseModel):
     experiment_id: str
     status: str
     runs: list[RunOut]
+
+
+class ExperimentSummary(BaseModel):
+    id: str
+    name: str
+    created_at: datetime
+    status: str
+    case_count: int
+    run_count: int
+    models: list[str]
+    baseline_experiment_id: str | None
+    sample: bool = Field(description="True when any run used the offline sample provider")
+    # "regression" | "ok" | "no_verdict", or None when there is no baseline.
+    regression: Literal["regression", "ok", "no_verdict"] | None
+
+
+class CaseResultOut(BaseModel):
+    run_id: str
+    provider: ProviderName
+    model_id: str
+    sample: bool
+    run_status: str
+    response: str | None
+    correctness_score: float | None
+    groundedness_score: float | None
+    required_facts_score: float | None
+    missing_facts: list[str]
+    latency_ms: float | None
+    input_tokens: int | None
+    output_tokens: int | None
+    estimated_cost: float | None
+    judge_provider: str | None
+    judge_model_id: str | None
+    judge_reason: str | None
+    judge_input_tokens: int | None
+    judge_output_tokens: int | None
+    judge_cost: float | None
+    error: str | None
+    judge_error: str | None
+    flags: list[str] = Field(description="candidate_error, judge_error, missing_facts, low_correctness, low_groundedness")
+
+
+class CaseOut(BaseModel):
+    case_id: str
+    input: str
+    context: str | None
+    expected_answer: str
+    required_facts: list[str]
+    metadata: dict[str, MetadataValue]
+    results: list[CaseResultOut]
+
+
+class ResultsOut(BaseModel):
+    experiment_id: str
+    total_cases: int
+    low_score_threshold: float
+    cases: list[CaseOut]
