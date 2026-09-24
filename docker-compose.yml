@@ -1,0 +1,37 @@
+# One-command local launch:  docker compose up --build
+#   UI  -> http://localhost:3000
+#   API -> http://localhost:8000 (docs at /docs)
+# Keys and model IDs come from ./.env (copy .env.example); without it, only sample mode runs.
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      # Inside the container the database lives on the named volume, whatever .env says.
+      DATABASE_URL: sqlite:////data/evalforge.db
+      SAMPLE_MODE: ${SAMPLE_MODE:-true}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+    ports:
+      - "8000:8000"
+    volumes:
+      - evalforge-data:/data
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+    ports:
+      - "3000:3000"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  evalforge-data:

@@ -56,6 +56,8 @@ model run `pending → running → completed | partial | failed`.
 
 ## Implementation sequence
 
+All five milestones are implemented (see the README's *Verification status*). Live provider runs are still pending API keys.
+
 1. **M1 skeleton & contracts** — config, DB + schema init, ORM models, Pydantic schemas,
    `/health`, `/models`, CORS, provider protocol, synthetic dataset, tests.
 2. **M2 live run & scoring** — adapters, bounded async runner with retries, judge,
@@ -81,3 +83,5 @@ model run `pending → running → completed | partial | failed`.
 | OpenAI API (M2) | Responses API (`responses.create`) | OpenAI's current primary text API. |
 | Regression verdict (M3) | Candidate's latest finished run vs baseline's latest finished run of the same provider/model; flag if mean correctness or groundedness over paired cases drops by more than the threshold; no verdict if any applicable case is unpaired | Follows the guide's "refuse a verdict on missing or incompatible data" literally; a partial run gives numbers but no verdict. |
 | Initial model IDs (M2) | OpenAI `gpt-6-luna`, `gpt-6-sol` (user-specified); Anthropic `claude-haiku-4-5`, `claude-sonnet-5`; judge `claude-sonnet-5` | OpenAI prices not yet verified → cost shows "unavailable" until added to the pricing file. |
+| Packaging (M5) | Backend `python:3.11-slim` image (non-root, `/data` volume, healthcheck); frontend Next.js `standalone` output on `node:22-alpine`; Compose with named volume `evalforge-data` | One command locally; `NEXT_PUBLIC_API_URL` is a build arg because Next inlines it at build time. |
+| CI (M5) | GitHub Actions: backend pytest + mypy, frontend lint + tsc + build | Needs no secrets (fake providers). |
