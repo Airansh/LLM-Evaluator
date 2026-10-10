@@ -4,13 +4,39 @@
 
 EvalForge is a local-first evaluation and regression-testing app. You upload a small JSON dataset, choose a system prompt and models (OpenAI, Anthropic, Gemini), and run an experiment. You can then inspect individual failures and compare the experiment against an earlier baseline. A regression verdict is given only when the comparison is like-for-like.
 
-> **What has and hasn't been verified.** Every result, number and screenshot in this repo comes from the **offline sample mode** or from **fake providers in tests**. The OpenAI, Anthropic and Gemini adapters exist and are unit-tested against stubbed SDK clients, but **no live provider call has been made yet**. There are **no real model results or benchmarks** here. See [Verification status](#verification-status).
+> **What has and hasn't been verified.** One small **live** run has been made: Anthropic `claude-haiku-4-5` against Google `gemini-3.8-flash` on the 12-case sample dataset, judged by `claude-sonnet-5` (see [Live results](#live-results-2026-10-10)). The OpenAI adapter has **not** been called live. All screenshots and the regression example come from the offline **sample mode** or from **fake providers in tests**. See [Verification status](#verification-status).
 
 ![Results page (sample mode)](docs/screenshots/3-results.png)
 
 ## The problem
 
 Changing a prompt or switching models can quietly make answers worse, slower or more expensive. Checking a handful of outputs by eye doesn't catch that reliably. EvalForge runs a fixed set of cases through each model and scores every answer the same way. It shows where the numbers come from (how many cases each average covers, the judge's reasoning, errors), and it refuses to call a regression when the two runs aren't actually comparable.
+
+## Live results (2026-10-10)
+
+The first live run, made with `backend/scripts/live_benchmark.py`. It compares one model from each provider on all 12 cases of `datasets/customer_support.json`, using the same system prompt and judge for both. Candidate answers were capped at 1,024 output tokens and judge replies at 1,500, under a $0.50-per-provider spending cap. No request errors or judge errors occurred.
+
+| Model (exact ID) | Correctness | Groundedness | Required facts | Latency p50 | Tokens in / out | Candidate cost | Judge cost |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `anthropic/claude-haiku-4-5` | 90.4 (n=12) | 94.5 (n=11) | 100.0 (n=10) | 1.16 s | 1,175 / 966 | $0.0060 | $0.0259 |
+| `gemini/gemini-3.8-flash` | 88.3 (n=12) | 97.3 (n=11) | 100.0 (n=10) | 2.98 s | 1,019 / 4,001 | unavailable* | $0.0244 |
+
+Judge: `anthropic/claude-sonnet-5`. Correctness and groundedness are judge estimates on a 0–100 scale. Groundedness skips the one case without context, and required facts skips the two cases that list none.
+
+\* No verified price: Google's pricing page could not be reached from the environment where the run was made, so no Gemini price was recorded. Gemini's output count includes its thinking tokens.
+
+**Reading these numbers honestly:**
+
+- **Quality is effectively tied on this dataset.** A 2-point gap in mean correctness is about one judge point per case, and n=12 with single non-deterministic samples is far too small to separate the models.
+- **`general_001` is a dataset flaw, not a model failure.** The system prompt says to answer *only from the policy context*, but that case has no context and expects general etiquette advice. Both models followed the prompt and declined ("the policy context does not contain information…"), and the judge scored them 10 and 0. With that case excluded, mean correctness is 97.7 (Haiku) and 96.4 (Gemini), n=11. It is kept in the table rather than dropped after the fact. Fixing it means changing the case or the prompt, which would make future runs non-comparable with this one.
+- **The judge does not see the system prompt.** It docked groundedness when a model mentioned "Northwind Outfitters", the company name given in the system prompt, because the name isn't in the case context (`warranty_001` for Gemini, `warranty_002` for Haiku).
+- **Possible same-family bias.** The judge is a Claude model and one candidate is Claude. A cross-provider judge would be a fairer check.
+- **The clearer differences are speed and verbosity.** Haiku's median latency was about 2.6× lower, and it produced about 4× fewer output tokens. Gemini's count includes thinking tokens, which it spends even on short answers.
+- **All five deliberate traps were handled by both models,** judging from the per-case scores and responses: the 45-day return, the question the context can't answer, the prompt injection, the "inactivity" conditional, and the no-context case (where both declined).
+
+**What it cost:** Anthropic **$0.0646** in total, covering the 2-case smoke run and the full run, candidates plus judge, from reported tokens × verified prices. Gemini used 1,234 input and 4,782 output tokens in total, including one adapter test call. That is at most $0.15 even at a deliberately pessimistic $5 / $30 per million tokens, and likely far less at actual Flash-tier rates.
+
+To reproduce: `cd backend && PYTHONPATH=. python scripts/live_benchmark.py smoke`, then `full`. The script refuses the full run if the smoke run projects more than $0.45 for either provider. It needs `EVALFORGE_ANTHROPIC_API_KEY` (or `ANTHROPIC_API_KEY`) and `GEMINI_API_KEY`, and it makes paid calls.
 
 ## Quick start
 
@@ -112,6 +138,7 @@ Each model run stores the judge's identity, the pricing version and an `eval_con
 - **Same-family bias.** If the judge comes from the same provider or family as a candidate (for example Claude judging Claude), it may favor that candidate. Use a judge from a different provider for cross-provider comparisons, or at least report which judge you used (the UI shows it on every result).
 - **Non-determinism.** Candidates and judge each run once per case at provider-default sampling. Re-running can change scores by a few points, which on a small dataset is the same order as the 3-point threshold.
 - **Prompt injection is mitigated, not solved.** The candidate response is HTML-escaped inside `<candidate_response>` tags, and the judge is told that content is untrusted and must not be followed. A sufficiently adversarial response might still sway the judge.
+- **The judge does not see the system prompt.** Details that come from the system prompt rather than the case context (such as the company name) can be marked ungrounded. This was observed in the live run.
 - **Lexical coverage is shallow.** It catches missing key numbers and terms but misses paraphrases, and it can't see whether a fact is used correctly.
 
 ## Regression detection
@@ -189,14 +216,15 @@ What was actually run for this version:
 | Browser end-to-end flow: create → run → results → failed case → baseline comparison, plus dark and 390px mobile | passed, no console errors, both with local servers and with `docker compose` |
 | Results identical after a server restart (tests + real uvicorn restart) and after `docker compose down` / `up` (named volume) | passed |
 | Key handling: `/models` never returns key values; key echoes redacted from stored errors (tests); no key material in server logs | passed (no real keys were configured) |
-| **Live provider calls (OpenAI, Anthropic, Gemini)** | **not run yet**: no API keys were available |
+| Live provider calls: Anthropic and Gemini | passed: 2-case smoke run, then 12 cases × 2 models plus judge, with no request or judge errors (see [Live results](#live-results-2026-10-10)) |
+| **Live provider calls: OpenAI** | **not run**: no OpenAI key used |
 
 ### Acceptance checklist
 
 - [x] Fresh clone starts with documented commands (Docker and non-Docker paths)
 - [x] JSON dataset validates and an explicitly labeled sample run completes
 - [x] OpenAI, Anthropic and Gemini adapters exist; missing keys produce a clear status
-- [ ] …and a live run with real keys has been done *(pending keys)*
+- [x] …and a live run with real keys has been done (Anthropic and Gemini; OpenAI not yet)
 - [x] Responses, model IDs, latency, usage and scoring details persist across restarts
 - [x] Per-case inspector shows the judge's rationale and errors
 - [x] A regression verdict requires identical cases, model and scoring settings
@@ -206,7 +234,7 @@ What was actually run for this version:
 
 ## Next steps
 
-1. **Live smoke run.** Add keys, run a small experiment (for example 5 cases × `claude-haiku-4-5` + `gpt-6-luna`), and record the exact model IDs and results here.
+1. **More live runs.** Add OpenAI, fix the `general_001` case/prompt conflict, use a non-Claude (or multi-provider) judge, and repeat each run several times so differences can be compared against the noise.
 2. **OpenAI (and Gemini) pricing.** Add verified per-token prices with sources so those costs stop showing "unavailable".
 3. **Repeated runs and uncertainty.** Run each case several times and report a spread or confidence interval, so a 3-point change can be judged against the noise.
 4. **Judge calibration.** Score a subset by hand, measure how well the judge agrees, and consider a cross-provider judge panel.
