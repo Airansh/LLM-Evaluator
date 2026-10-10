@@ -1,0 +1,48 @@
+# Benchmark runner as its own pod. It drives the backend Service over HTTP and holds no API
+# keys. Applied separately because it makes paid API calls when real models are selected:
+#   kubectl -n evalforge delete job evalforge-benchmark --ignore-not-found
+#   kubectl apply -f deploy/k8s/jobs/benchmark-job.yaml
+#   kubectl -n evalforge logs -f job/evalforge-benchmark
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: evalforge-benchmark
+  namespace: evalforge
+  labels:
+    app.kubernetes.io/name: evalforge-benchmark
+    app.kubernetes.io/part-of: evalforge
+spec:
+  backoffLimit: 0  # never retry automatically: a retry would spend the budget twice
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: evalforge-benchmark
+    spec:
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: benchmark
+          image: evalforge-backend:local
+          imagePullPolicy: IfNotPresent
+          command: ["python", "scripts/api_benchmark.py"]
+          env:
+            - {name: EVALFORGE_API_URL, value: "http://backend.evalforge.svc.cluster.local:8000"}
+            - {name: BENCH_MODELS, value: "anthropic/claude-haiku-4-5,gemini/gemini-3.8-flash"}
+            - {name: BENCH_MODE, value: "auto"}
+            - {name: BENCH_SMOKE_CASES, value: "2"}
+            - {name: BENCH_BUDGET_USD, value: "0.45"}
+            - {name: BENCH_LABEL, value: "kubernetes job"}
+          resources:
+            requests: {cpu: 50m, memory: 64Mi}
+            limits: {cpu: 250m, memory: 128Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]

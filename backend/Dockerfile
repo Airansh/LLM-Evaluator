@@ -13,6 +13,7 @@ RUN pip install -r requirements.txt
 
 COPY backend/app ./app
 COPY backend/pricing ./pricing
+COPY backend/scripts ./scripts
 COPY datasets /app/datasets
 
 RUN useradd --create-home --uid 1000 evalforge && mkdir -p /data && chown evalforge /data

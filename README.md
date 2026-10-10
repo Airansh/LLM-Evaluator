@@ -70,6 +70,74 @@ python -m app.demo --compare   # prompt v1 (baseline) vs prompt v2 (candidate) c
 
 With Docker, run `docker compose exec backend python -m app.demo --compare` instead. In the UI: **New evaluation → Use sample dataset → pick `sample/*` models → Create and run**, then **New candidate from this** to compare a prompt change.
 
+## Docker and Kubernetes
+
+The same two images run everywhere: under Docker Compose for local use, and as Kubernetes workloads. The benchmark runner is a **separate instance**: it reuses the backend image but runs its own process, `scripts/api_benchmark.py`. It talks to the backend only over HTTP and holds no API keys and no database, so keys stay in the backend container or pod.
+
+```text
+             ┌──────────── Compose network / Kubernetes namespace "evalforge" ────────────┐
+ browser ──► │ frontend (Next.js, 2 replicas in k8s) ─┐                                  │
+    │        │                                        │                                  │
+    └──────► │ backend (FastAPI, 1 replica) ◄─────────┴── benchmark runner (Job / bench) │
+             │   │  keys from Secret / env       HTTP only, no keys, no DB access       │
+             │   └─ SQLite on PersistentVolumeClaim / named volume                       │
+             └────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Docker
+
+| Image | Built from | Notes |
+| --- | --- | --- |
+| `evalforge-backend:local` | `backend/Dockerfile` | `python:3.11-slim`, non-root (UID 1000), `/data` volume, healthcheck on `/health`. Also contains the benchmark runner script |
+| `evalforge-frontend:local` | `frontend/Dockerfile` | Multi-stage build to Next.js `standalone` on `node:22-alpine`, non-root. `NEXT_PUBLIC_API_URL` is a build argument because Next.js inlines it at build time |
+
+```bash
+docker compose up --build                                     # backend :8000, frontend :3000
+docker compose --profile bench run --rm benchmark             # benchmark from a separate container
+BENCH_MODELS=sample/sample-extractive docker compose --profile bench run --rm benchmark   # free, offline
+```
+
+Compose passes `EVALFORGE_ANTHROPIC_API_KEY` / `ANTHROPIC_API_KEY`, `GEMINI_API_KEY` and `OPENAI_API_KEY` from your shell or `.env` to the backend only. It also defaults to cost-safe output caps (1,024 tokens for candidates, 1,500 for the judge).
+
+### Kubernetes (`deploy/k8s/`)
+
+| File | What it defines |
+| --- | --- |
+| `base/kustomization.yaml` | The kustomize entry point: namespace `evalforge`, common labels, image tags |
+| `base/configmap.yaml` | Non-secret settings: models, judge, caps, CORS |
+| `base/backend.yaml` | PVC (1 Gi, ReadWriteOnce) + **Deployment** (1 replica with the `Recreate` strategy, because SQLite has a single writer) + **Service** `backend:8000` |
+| `base/frontend.yaml` | **Deployment** (2 replicas, stateless) + **Service** `frontend:3000` |
+| `jobs/benchmark-job.yaml` | **Job** that runs the benchmark against `backend.evalforge.svc.cluster.local`, with `backoffLimit: 0` so a retry never spends the budget twice. Applied separately |
+| `kind-cluster.yaml` | Minimal local cluster config for [kind](https://kind.sigs.k8s.io/) |
+
+Every pod has readiness and liveness probes, CPU and memory requests and limits, `runAsNonRoot`, a read-only root filesystem, all capabilities dropped and `RuntimeDefault` seccomp. API keys come from a Secret, `evalforge-api-keys`, that you create yourself; each key is `optional`, so a missing provider shows as unavailable. No key is ever written into the manifests.
+
+```bash
+# 1. Build the images and load them into a local kind cluster
+docker build -f backend/Dockerfile -t evalforge-backend:local .
+docker build -t evalforge-frontend:local frontend
+kind create cluster --name evalforge --config deploy/k8s/kind-cluster.yaml
+kind load docker-image evalforge-backend:local evalforge-frontend:local --name evalforge
+
+# 2. Deploy, then add whichever API keys you have (from a file, so they stay out of shell history)
+kubectl apply -k deploy/k8s/base
+kubectl -n evalforge create secret generic evalforge-api-keys --from-env-file=secrets.env
+kubectl -n evalforge rollout restart deployment/backend
+kubectl -n evalforge rollout status deployment/backend
+
+# 3. Open the UI (the frontend image calls the backend at localhost:8000)
+kubectl -n evalforge port-forward svc/backend 8000:8000 &
+kubectl -n evalforge port-forward svc/frontend 3000:3000 &
+
+# 4. Benchmark from its own pod (makes paid calls for real models)
+kubectl apply -f deploy/k8s/jobs/benchmark-job.yaml
+kubectl -n evalforge logs -f job/evalforge-benchmark
+```
+
+`secrets.env` holds lines such as `GEMINI_API_KEY=...` and `EVALFORGE_ANTHROPIC_API_KEY=...`. It's listed in `.gitignore`; never commit it.
+
+**What has been verified here:** both images build. Each was run with the same restrictions the pods use (read-only root, UID 1000, all capabilities dropped, no privilege escalation) and served `/health` and the UI. The benchmark runner ran as its own container against the backend, both on a plain Docker network and as the Compose `bench` service (with free sample models), and its budget guard and model checks refused the cases they should. The manifests render with `kubectl kustomize` and pass `kubeconform -strict` against the Kubernetes v1.37 schemas, and CI repeats the image builds and manifest validation. **The manifests have not been applied to a running cluster:** kind could not start in this sandbox (its kernel blocks the nested container runtime from setting `oom_score_adj`), so the Kubernetes runtime path is validated but not exercised.
+
 ## Credentials and costs
 
 All keys go in **one file: `.env` in the repository root** (copy it from `.env.example`). The file is git-ignored. Only the backend reads it; the browser never receives keys, and `GET /models` reports only *whether* each key is set.
@@ -215,6 +283,9 @@ What was actually run for this version:
 | Frontend `npm run lint`, `tsc --noEmit`, `npm run build` | clean |
 | Browser end-to-end flow: create → run → results → failed case → baseline comparison, plus dark and 390px mobile | passed, no console errors, both with local servers and with `docker compose` |
 | Results identical after a server restart (tests + real uvicorn restart) and after `docker compose down` / `up` (named volume) | passed |
+| Docker images under pod-equivalent hardening (read-only root, UID 1000, no capabilities); benchmark runner as a separate container and as the Compose `bench` service | passed (sample models) |
+| Kubernetes manifests: `kubectl kustomize` render + `kubeconform -strict` (v1.37 schemas) | passed |
+| **Kubernetes manifests applied to a live cluster** | **not run**: kind cannot start in this sandbox (kernel blocks nested `oom_score_adj`) |
 | Key handling: `/models` never returns key values; key echoes redacted from stored errors (tests); no key material in server logs | passed (no real keys were configured) |
 | Live provider calls: Anthropic and Gemini | passed: 2-case smoke run, then 12 cases × 2 models plus judge, with no request or judge errors (see [Live results](#live-results-2026-10-10)) |
 | **Live provider calls: OpenAI** | **not run**: no OpenAI key used |

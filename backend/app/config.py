@@ -3,7 +3,7 @@
 from functools import lru_cache
 from typing import Annotated
 
-from pydantic import AliasChoices, Field, SecretStr, field_validator
+from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 from app.providers.base import ProviderName
@@ -13,14 +13,13 @@ CommaList = Annotated[list[str], NoDecode]
 
 class Settings(BaseSettings):
     # Works whether uvicorn is started from the repo root or from backend/.
-    model_config = SettingsConfigDict(env_file=(".env", "../.env"), extra="ignore", populate_by_name=True)
+    model_config = SettingsConfigDict(env_file=(".env", "../.env"), extra="ignore")
 
     openai_api_key: SecretStr | None = None
-    # EVALFORGE_ANTHROPIC_API_KEY is an alternative for hosts that reserve ANTHROPIC_* variables
-    # for their own use (e.g. hosted coding-agent environments). ANTHROPIC_API_KEY wins if both are set.
-    anthropic_api_key: SecretStr | None = Field(
-        default=None, validation_alias=AliasChoices("anthropic_api_key", "evalforge_anthropic_api_key")
-    )
+    anthropic_api_key: SecretStr | None = None
+    # Alternative name for hosts that reserve ANTHROPIC_* variables for their own use (e.g. hosted
+    # coding-agent environments). A non-empty ANTHROPIC_API_KEY wins if both are set.
+    evalforge_anthropic_api_key: SecretStr | None = None
     gemini_api_key: SecretStr | None = None
 
     openai_models: CommaList = Field(default_factory=list)
@@ -50,7 +49,7 @@ class Settings(BaseSettings):
             return [item.strip() for item in value.split(",") if item.strip()]
         return value
 
-    @field_validator("openai_api_key", "anthropic_api_key", "gemini_api_key", mode="before")
+    @field_validator("openai_api_key", "anthropic_api_key", "evalforge_anthropic_api_key", "gemini_api_key", mode="before")
     @classmethod
     def _blank_key_is_none(cls, value: object) -> object:
         if isinstance(value, str) and not value.strip():
@@ -68,7 +67,7 @@ class Settings(BaseSettings):
         """None for providers without a key, including the keyless "sample" provider."""
         return {
             "openai": self.openai_api_key,
-            "anthropic": self.anthropic_api_key,
+            "anthropic": self.anthropic_api_key or self.evalforge_anthropic_api_key,
             "gemini": self.gemini_api_key,
         }.get(provider)
 

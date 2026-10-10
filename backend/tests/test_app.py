@@ -90,3 +90,6 @@ def test_evalforge_anthropic_key_alias(monkeypatch) -> None:  # noqa: ANN001
     assert Settings(_env_file=None).api_key("anthropic").get_secret_value() == "sk-alias"  # type: ignore[union-attr]
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-primary")
     assert Settings(_env_file=None).api_key("anthropic").get_secret_value() == "sk-primary"  # type: ignore[union-attr]
+    # An empty primary (as Compose/Kubernetes pass for unset variables) must not hide the alternative.
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "")
+    assert Settings(_env_file=None).api_key("anthropic").get_secret_value() == "sk-alias"  # type: ignore[union-attr]
