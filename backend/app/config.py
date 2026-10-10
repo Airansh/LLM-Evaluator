@@ -3,7 +3,7 @@
 from functools import lru_cache
 from typing import Annotated
 
-from pydantic import Field, SecretStr, field_validator
+from pydantic import AliasChoices, Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 from app.providers.base import ProviderName
@@ -13,10 +13,14 @@ CommaList = Annotated[list[str], NoDecode]
 
 class Settings(BaseSettings):
     # Works whether uvicorn is started from the repo root or from backend/.
-    model_config = SettingsConfigDict(env_file=(".env", "../.env"), extra="ignore")
+    model_config = SettingsConfigDict(env_file=(".env", "../.env"), extra="ignore", populate_by_name=True)
 
     openai_api_key: SecretStr | None = None
-    anthropic_api_key: SecretStr | None = None
+    # EVALFORGE_ANTHROPIC_API_KEY is an alternative for hosts that reserve ANTHROPIC_* variables
+    # for their own use (e.g. hosted coding-agent environments). ANTHROPIC_API_KEY wins if both are set.
+    anthropic_api_key: SecretStr | None = Field(
+        default=None, validation_alias=AliasChoices("anthropic_api_key", "evalforge_anthropic_api_key")
+    )
     gemini_api_key: SecretStr | None = None
 
     openai_models: CommaList = Field(default_factory=list)

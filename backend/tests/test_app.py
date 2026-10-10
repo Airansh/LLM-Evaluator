@@ -82,3 +82,11 @@ def test_sample_dataset_endpoint_and_validation(client: TestClient) -> None:
     assert bad["valid"] is False
     assert any("expected_answer" in e for e in bad["errors"])
     assert client.post("/datasets/validate", json="not a dataset").json()["valid"] is False
+
+
+def test_evalforge_anthropic_key_alias(monkeypatch) -> None:  # noqa: ANN001
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.setenv("EVALFORGE_ANTHROPIC_API_KEY", "sk-alias")
+    assert Settings(_env_file=None).api_key("anthropic").get_secret_value() == "sk-alias"  # type: ignore[union-attr]
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-primary")
+    assert Settings(_env_file=None).api_key("anthropic").get_secret_value() == "sk-primary"  # type: ignore[union-attr]
