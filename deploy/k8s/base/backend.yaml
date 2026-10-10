@@ -1,0 +1,100 @@
+# Backend: FastAPI + SQLite. SQLite allows one writer, so this is a single replica with a
+# ReadWriteOnce volume and the Recreate strategy (no two pods on the database at once).
+# Moving to Postgres is what would allow scaling it out.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: evalforge-data
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  labels:
+    app.kubernetes.io/name: evalforge-backend
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: evalforge-backend
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: evalforge-backend
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: backend
+          image: evalforge-backend
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8000
+          envFrom:
+            - configMapRef:
+                name: evalforge-config
+          env:
+            # Each key is optional: a missing provider shows as unavailable, never as mock output.
+            - name: ANTHROPIC_API_KEY
+              valueFrom:
+                secretKeyRef: {name: evalforge-api-keys, key: ANTHROPIC_API_KEY, optional: true}
+            - name: EVALFORGE_ANTHROPIC_API_KEY
+              valueFrom:
+                secretKeyRef: {name: evalforge-api-keys, key: EVALFORGE_ANTHROPIC_API_KEY, optional: true}
+            - name: GEMINI_API_KEY
+              valueFrom:
+                secretKeyRef: {name: evalforge-api-keys, key: GEMINI_API_KEY, optional: true}
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef: {name: evalforge-api-keys, key: OPENAI_API_KEY, optional: true}
+          readinessProbe:
+            httpGet: {path: /health, port: http}
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: {path: /health, port: http}
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          resources:
+            requests: {cpu: 100m, memory: 256Mi}
+            limits: {cpu: "1", memory: 512Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: evalforge-data
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend
+spec:
+  selector:
+    app.kubernetes.io/name: evalforge-backend
+  ports:
+    - name: http
+      port: 8000
+      targetPort: http

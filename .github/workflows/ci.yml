@@ -44,3 +44,27 @@ jobs:
       - run: npm run build
         env:
           NEXT_TELEMETRY_DISABLED: "1"
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker compose config -q
+      - run: docker compose --profile bench config -q
+      - run: docker build -f backend/Dockerfile -t evalforge-backend:local .
+      - run: docker build -t evalforge-frontend:local frontend
+      # The benchmark runner image is the backend image; check its script imports cleanly.
+      - run: docker run --rm evalforge-backend:local python -c "import scripts.api_benchmark"
+
+  kubernetes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install kubeconform
+        run: |
+          curl -fsSL https://github.com/yannh/kubeconform/releases/download/v0.8.0/kubeconform-linux-amd64.tar.gz | tar xz kubeconform
+          sudo mv kubeconform /usr/local/bin/
+      - name: Render and validate manifests
+        run: |
+          kubectl kustomize deploy/k8s/base > rendered.yaml
+          kubeconform -strict -summary rendered.yaml deploy/k8s/jobs/benchmark-job.yaml

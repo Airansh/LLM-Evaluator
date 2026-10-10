@@ -1,0 +1,21 @@
+# Non-secret backend settings. API keys live in the Secret `evalforge-api-keys`, which is
+# created out of band (see README) so no key ever appears in these manifests.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: evalforge-config
+data:
+  DATABASE_URL: sqlite:////data/evalforge.db
+  SAMPLE_MODE: "true"
+  CORS_ORIGINS: http://localhost:3000
+  ANTHROPIC_MODELS: claude-haiku-4-5,claude-sonnet-5
+  GEMINI_MODELS: gemini-3.8-flash
+  OPENAI_MODELS: ""
+  JUDGE_PROVIDER: anthropic
+  JUDGE_MODEL: claude-sonnet-5
+  MAX_CONCURRENCY: "4"
+  MAX_ATTEMPTS: "3"
+  REQUEST_TIMEOUT_S: "120"
+  # Cost-safe output caps; raise if answers are being truncated.
+  CANDIDATE_MAX_OUTPUT_TOKENS: "1024"
+  JUDGE_MAX_OUTPUT_TOKENS: "1500"

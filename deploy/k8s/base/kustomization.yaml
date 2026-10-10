@@ -1,0 +1,20 @@
+# Render: kubectl kustomize deploy/k8s/base   Apply: kubectl apply -k deploy/k8s/base
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: evalforge
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: evalforge
+    includeSelectors: false
+resources:
+  - namespace.yaml
+  - configmap.yaml
+  - backend.yaml
+  - frontend.yaml
+# Images are built locally (see README). For a registry, override with:
+#   kustomize edit set image evalforge-backend=<registry>/evalforge-backend:<tag>
+images:
+  - name: evalforge-backend
+    newTag: local
+  - name: evalforge-frontend
+    newTag: local

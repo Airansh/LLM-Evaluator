@@ -27,6 +27,7 @@ def make_settings(tmp_path: Path) -> Callable[..., Settings]:
             "database_url": f"sqlite:///{tmp_path / 'test.db'}",
             "openai_api_key": None,
             "anthropic_api_key": None,
+            "evalforge_anthropic_api_key": None,
             "gemini_api_key": None,
             "openai_models": [],
             "anthropic_models": [],
