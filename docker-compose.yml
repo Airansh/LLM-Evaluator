@@ -1,0 +1,72 @@
+# One-command local launch:  docker compose up --build
+#   UI  -> http://localhost:3000
+#   API -> http://localhost:8000 (docs at /docs)
+# Keys and model IDs come from the shell or ./.env (copy .env.example); without keys, only sample mode runs.
+#
+# Benchmark from a separate container (makes paid API calls when real models are selected):
+#   docker compose --profile bench run --rm benchmark
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    image: evalforge-backend:local
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      # Inside the container the database lives on the named volume, whatever .env says.
+      DATABASE_URL: sqlite:////data/evalforge.db
+      SAMPLE_MODE: ${SAMPLE_MODE:-true}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+      # Keys from the shell or .env; only the backend container ever receives them.
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      EVALFORGE_ANTHROPIC_API_KEY: ${EVALFORGE_ANTHROPIC_API_KEY:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_MODELS: ${ANTHROPIC_MODELS:-claude-haiku-4-5,claude-sonnet-5}
+      GEMINI_MODELS: ${GEMINI_MODELS:-gemini-3.8-flash}
+      OPENAI_MODELS: ${OPENAI_MODELS:-}
+      JUDGE_PROVIDER: ${JUDGE_PROVIDER:-anthropic}
+      JUDGE_MODEL: ${JUDGE_MODEL:-claude-sonnet-5}
+      # Cost-safe output caps for local runs; raise them in .env if answers get truncated.
+      CANDIDATE_MAX_OUTPUT_TOKENS: ${CANDIDATE_MAX_OUTPUT_TOKENS:-1024}
+      JUDGE_MAX_OUTPUT_TOKENS: ${JUDGE_MAX_OUTPUT_TOKENS:-1500}
+    ports:
+      - "8000:8000"
+    volumes:
+      - evalforge-data:/data
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+    image: evalforge-frontend:local
+    ports:
+      - "3000:3000"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Separate instance that drives the backend over the Compose network. It holds no keys and
+  # no database; results land in the backend and show up in the UI.
+  benchmark:
+    profiles: ["bench"]
+    image: evalforge-backend:local
+    command: ["python", "scripts/api_benchmark.py"]
+    environment:
+      EVALFORGE_API_URL: http://backend:8000
+      BENCH_MODELS: ${BENCH_MODELS:-anthropic/claude-haiku-4-5,gemini/gemini-3.8-flash}
+      BENCH_MODE: ${BENCH_MODE:-auto}
+      BENCH_SMOKE_CASES: ${BENCH_SMOKE_CASES:-2}
+      BENCH_BUDGET_USD: ${BENCH_BUDGET_USD:-0.45}
+      BENCH_LABEL: ${BENCH_LABEL:-docker compose}
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  evalforge-data:
