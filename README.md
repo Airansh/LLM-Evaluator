@@ -51,7 +51,7 @@ All keys go in **one file: `.env` in the repository root** (copy it from `.env.e
 | Provider | Variable | Where to get a key | Candidate models (exact IDs) |
 | --- | --- | --- | --- |
 | OpenAI | `OPENAI_API_KEY` | https://platform.openai.com/api-keys | `OPENAI_MODELS=gpt-6-luna,gpt-6-sol` |
-| Anthropic | `ANTHROPIC_API_KEY` | Claude Console → Settings → API keys | `ANTHROPIC_MODELS=claude-haiku-4-5,claude-sonnet-5` |
+| Anthropic | `ANTHROPIC_API_KEY` (or `EVALFORGE_ANTHROPIC_API_KEY` where the host reserves `ANTHROPIC_*`) | Claude Console → Settings → API keys | `ANTHROPIC_MODELS=claude-haiku-4-5,claude-sonnet-5` |
 | Gemini | `GEMINI_API_KEY` | https://aistudio.google.com/apikey | `GEMINI_MODELS=` (add exact IDs) |
 
 - **Judge:** `JUDGE_PROVIDER` + `JUDGE_MODEL` (default `anthropic` / `claude-sonnet-5`) must name a provider whose key is set. If the judge is unavailable, a run with real models is rejected with the reason.
