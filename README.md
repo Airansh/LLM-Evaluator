@@ -4,9 +4,15 @@
 
 EvalForge is a local-first evaluation and regression-testing app. You upload a small JSON dataset, choose a system prompt and models (OpenAI, Anthropic, Gemini), and run an experiment. You can then inspect individual failures and compare the experiment against an earlier baseline. A regression verdict is given only when the comparison is like-for-like.
 
-> **What has and hasn't been verified.** One small **live** run has been made: Anthropic `claude-haiku-4-5` against Google `gemini-3.8-flash` on the 12-case sample dataset, judged by `claude-sonnet-5` (see [Live results](#live-results-2026-10-10)). The OpenAI adapter has **not** been called live. All screenshots and the regression example come from the offline **sample mode** or from **fake providers in tests**. See [Verification status](#verification-status).
+> **What has and hasn't been verified.** Live runs have been made with Anthropic and Google models, all judged by `claude-sonnet-5`:
+> - `claude-haiku-4-5` against `gemini-3.8-flash` on the bundled customer-support dataset ([Live results](#live-results-2026-10-10)).
+> - Two runs on a 12-case *Campus AI Enablement Desk* dataset: Haiku against Gemini Flash, then Sonnet against Gemini Flash as a baseline comparison ([Campus runs](#campus-ai-enablement-desk-runs-2026-10-10)).
+>
+> Every screenshot in this README comes from those campus runs. The OpenAI adapter has **not** been called live. See [Verification status](#verification-status).
+>
+> **Project report:** [PDF](docs/report/EvalForge-Project-Report.pdf) · [Word](docs/report/EvalForge-Project-Report.docx)
 
-![Results page (sample mode)](docs/screenshots/3-results.png)
+![Results page from a live run: claude-haiku-4-5 vs gemini-3.8-flash](docs/screenshots/live-1-run-a-model-comparison.png)
 
 ## The problem
 
@@ -37,6 +43,57 @@ Judge: `anthropic/claude-sonnet-5`. Correctness and groundedness are judge estim
 **What it cost:** Anthropic **$0.0646** in total, covering the 2-case smoke run and the full run, candidates plus judge, from reported tokens × verified prices. Gemini used 1,234 input and 4,782 output tokens in total, including one adapter test call. That is at most $0.15 even at a deliberately pessimistic $5 / $30 per million tokens, and likely far less at actual Flash-tier rates.
 
 To reproduce: `cd backend && PYTHONPATH=. python scripts/live_benchmark.py smoke`, then `full`. The script refuses the full run if the smoke run projects more than $0.45 for either provider. It needs `EVALFORGE_ANTHROPIC_API_KEY` (or `ANTHROPIC_API_KEY`) and `GEMINI_API_KEY`, and it makes paid calls.
+
+## Campus AI Enablement Desk runs (2026-10-10)
+
+These runs used a local setup, the web UI and a custom 12-case dataset about university AI-tool support. The cases cover:
+
+- Data classification: student grades, and patient health information in a clinical study.
+- Claude for Education licensing, for faculty and for alumni.
+- Gravyty bot launch requirements and what a bot may disclose.
+- How long AI-tool pilots run, and what decides whether they continue.
+- A prompt-injection request for admin credentials.
+- An outage during a proctored exam.
+- Student use of ChatGPT Edu.
+- One general question with no context.
+
+The system prompt tells the model to answer only from the supplied context, except in the no-context case. The dataset itself isn't committed to this repository.
+
+There were two experiments:
+
+- **Run A (baseline):** `claude-haiku-4-5` against `gemini-3.8-flash`.
+- **Run B:** created from run A with **New candidate from this**, so it has the same cases and an unchanged prompt. It ran `claude-sonnet-5` against `gemini-3.8-flash`.
+
+The judge was `claude-sonnet-5` in both runs. Every model answered all 12 cases, with no request errors.
+
+| Run | Model | Correctness | Groundedness | Required facts | Latency p50 | Tokens in / out |
+| --- | --- | --- | --- | --- | --- | --- |
+| A | `anthropic/claude-haiku-4-5` | 94.2 (n=12) | 89.1 (n=11) | 100.0 (n=10) | 1.48 s | 3,154 / 1,377 |
+| A | `gemini/gemini-3.8-flash` | 94.6 (n=12) | 97.3 (n=11) | 95.0 (n=10) | 3.58 s | 2,871 / 4,697 |
+| B | `anthropic/claude-sonnet-5` | 94.6 (n=12) | 92.3 (n=11) | 100.0 (n=10) | 1.75 s | 4,340 / 1,506 |
+| B | `gemini/gemini-3.8-flash` | 94.2 (n=12) | 97.3 (n=11) | 95.0 (n=10) | 3.93 s | 2,871 / 4,537 |
+
+**Run B with its regression check against run A:**
+
+![Run B model comparison: claude-sonnet-5 vs gemini-3.8-flash](docs/screenshots/live-2-run-b-model-comparison.png)
+
+![Regression vs. baseline: Sonnet not comparable, Gemini within threshold](docs/screenshots/live-3-regression-vs-baseline.png)
+
+**Quality vs. cost and per-case results (run A):**
+
+![Quality vs. cost chart for run A](docs/screenshots/live-4-quality-vs-cost.png)
+
+![Per-case correctness for run A](docs/screenshots/live-5-per-case-results.png)
+
+**Reading these numbers honestly:**
+
+- **Quality is a tie.** Mean correctness is within 0.4 points across all four model runs. With 12 cases, a single case moves the mean by about 8 points.
+- **Gemini stayed closest to the context, and the Claude models covered more required facts.** Gemini's groundedness was 97.3 in both runs, against 89.1 for Haiku and 92.3 for Sonnet. On required facts, Claude scored 100.0 and Gemini 95.0.
+- **The Claude models were more than twice as fast.** Median latency was 1.48 s for Haiku and 1.75 s for Sonnet, against 3.58–3.93 s for Gemini. Gemini also produced about 3× more output tokens, because its count includes thinking tokens.
+- **`access_002` is the outlier.** It asks whether alumni can keep using Claude for Education, and it scored 45–80 for every model, while every other case scored 90 or more. When all models miss the same case, the case's context or expected answer is the likely problem, so review it before reusing the dataset.
+- **The regression check behaved as designed.** For Gemini, run B against run A came out at −0.4 pp correctness and ±0.0 pp groundedness over 12 and 11 paired cases: *within threshold*. The largest per-case drop was `access_002` at −10 pp with the prompt unchanged, which shows the run-to-run noise directly. Sonnet is marked *not comparable* because the baseline has no Sonnet run, so no verdict is given rather than comparing Sonnet against Haiku.
+- **Cost.** Only the Claude runs are plotted on the quality-vs-cost chart. Gemini is listed as *not plotted* because no verified Gemini price is on file.
+- **Judge caveats apply.** The judge is a Claude model scoring Claude answers, and each model answered each case once.
 
 ## Quick start
 
@@ -237,17 +294,14 @@ What this shows honestly: the shorter prompt dropped fact coverage by 33 points,
 
 ## Screens
 
-| | |
-| --- | --- |
-| ![Dashboard](docs/screenshots/1-dashboard.png) | ![Create](docs/screenshots/2-create.png) |
-| ![Failure inspector: failed request next to a scored response](docs/screenshots/4-inspector-failed-case.png) | ![Baseline comparison](docs/screenshots/5-comparison.png) |
+The screenshots of the results page and the baseline comparison are in [Campus AI Enablement Desk runs](#campus-ai-enablement-desk-runs-2026-10-10). The app has these pages:
 
 - **Dashboard (`/`):** experiments, status, case-evaluation count, regression indicator.
 - **Create (`/experiments/new`):** prompt, sample or uploaded dataset with validation errors, models with key availability, compatible baselines only, threshold, call count.
 - **Results (`/experiments/[id]`):** model table with denominators and error counts, regression panel, quality-vs-cost chart (runs that can't be plotted are listed with the reason), per-case grid, live progress.
 - **Failure inspector (`/experiments/[id]/test/[testId]`):** question, context, expected answer, each response, fact matches, metrics, judge rationale, costs, errors.
 
-Dark mode and a 390px mobile layout are in [`docs/screenshots/`](docs/screenshots/). All screenshots are from a real session driven by an automated browser against the sample-mode backend.
+All screenshots in [`docs/screenshots/`](docs/screenshots/) come from the live campus runs on 2026-10-10. The UI also supports dark mode and a 390 px mobile layout; both were checked in the browser end-to-end test.
 
 ## API
 
@@ -287,7 +341,7 @@ What was actually run for this version:
 | Kubernetes manifests: `kubectl kustomize` render + `kubeconform -strict` (v1.37 schemas) | passed |
 | **Kubernetes manifests applied to a live cluster** | **not run**: kind cannot start in this sandbox (kernel blocks nested `oom_score_adj`) |
 | Key handling: `/models` never returns key values; key echoes redacted from stored errors (tests); no key material in server logs | passed (no real keys were configured) |
-| Live provider calls: Anthropic and Gemini | passed: 2-case smoke run, then 12 cases × 2 models plus judge, with no request or judge errors (see [Live results](#live-results-2026-10-10)) |
+| Live provider calls: Anthropic and Gemini | passed: customer-support set (2-case smoke run, then 12 cases × 2 models plus judge, with no request or judge errors; see [Live results](#live-results-2026-10-10)), plus two campus runs through the web UI covering 12 cases × 4 model runs and a baseline comparison (see [Campus runs](#campus-ai-enablement-desk-runs-2026-10-10)) |
 | **Live provider calls: OpenAI** | **not run**: no OpenAI key used |
 
 ### Acceptance checklist
