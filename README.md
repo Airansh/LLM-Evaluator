@@ -10,7 +10,7 @@ EvalForge is a local-first evaluation and regression-testing app. You upload a s
 >
 > Every screenshot in this README comes from those campus runs. The OpenAI adapter has **not** been called live. See [Verification status](#verification-status).
 >
-> **Project report:** [PDF](docs/report/EvalForge-Project-Report.pdf) · [Word](docs/report/EvalForge-Project-Report.docx)
+> **Project report:** [PDF](docs/report/EvalForge-Project-Report.pdf)
 
 ![Results page from a live run: claude-haiku-4-5 vs gemini-3.8-flash](docs/screenshots/live-1-run-a-model-comparison.png)
 
